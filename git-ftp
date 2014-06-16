@@ -54,6 +54,7 @@ CURL_PRIVATE_KEY=""
 CURL_UPLOADS=()
 CURL_DELETE=()
 CURL_DISABLE_EPSV=0
+CURL_BINARY=/usr/bin/curl
 declare -a CURL_ARGS
 declare -i VERBOSE=0
 declare -i IGNORE_DEPLOYED=0
@@ -178,7 +179,7 @@ SET DEFAULTS
 	. git config git-ftp.insecure 1
 
 
-SET SCOPE DEFAULTS 
+SET SCOPE DEFAULTS
 	e.g. your scope is 'testing'
 	. git config git-ftp.testing.url ftp.example.local
 
@@ -381,7 +382,7 @@ upload_file() {
 	CURL_ARGS+=(-T "$SRC_FILE")
 	CURL_ARGS+=(--ftp-create-dirs)
 	CURL_ARGS+=("$REMOTE_PROTOCOL://$REMOTE_HOST/${REMOTE_PATH}${DEST_FILE}")
-	curl "${CURL_ARGS[@]}"
+	${CURL_BINARY} "${CURL_ARGS[@]}"
 	check_exit_status "Could not upload file: '${REMOTE_PATH}$DEST_FILE'." $ERROR_UPLOAD
 }
 
@@ -404,12 +405,14 @@ fire_upload_buffer() {
 	if [ -z "$CURL_UPLOADS" ]; then
 		return 0
 	fi
-	print_info "Uploading ..."
+	n=${#CURL_UPLOADS[@]}
+	let nfiles=n/3
+	print_info "Uploading $nfiles files..."
 	set_default_curl_options
 	CURL_ARGS+=(--ftp-create-dirs)
-	CURL_ARGS+=("${CURL_UPLOADS[@]}")
-	curl "${CURL_ARGS[@]}"
-	check_exit_status "Could not upload files." $ERROR_UPLOAD
+	for ((i=0; i< n; i+=3)) {
+	    ${CURL_BINARY} "${CURL_ARGS[@]}" "${CURL_UPLOADS[i]}" "${CURL_UPLOADS[i+1]}" "${CURL_UPLOADS[i+2]}"
+	}
 	CURL_UPLOADS=()
 }
 
@@ -419,9 +422,9 @@ delete_file() {
 	CURL_ARGS+=(-Q "${REMOTE_DELETE_CMD}${REMOTE_PATH}${FILENAME}")
 	CURL_ARGS+=("$REMOTE_PROTOCOL://$REMOTE_HOST")
 	if [ "${REMOTE_CMD_OPTIONS:0:2}" = "-v" ]; then
-		curl "${CURL_ARGS[@]}"
+		${CURL_BINARY} "${CURL_ARGS[@]}"
 	else
-		curl "${CURL_ARGS[@]}" > /dev/null 2>&1
+		${CURL_BINARY} "${CURL_ARGS[@]}" > /dev/null 2>&1
 	fi
 	if [ $? -ne 0 ]; then
 		write_error_log "Could not delete ${REMOTE_PATH}${FILENAME}, continuing..."
@@ -442,9 +445,9 @@ fire_delete_buffer() {
 	CURL_ARGS+=("${CURL_DELETE[@]}")
 	CURL_ARGS+=("$REMOTE_PROTOCOL://$REMOTE_HOST")
 	if [ "${REMOTE_CMD_OPTIONS:0:2}" = "-v" ]; then
-		curl "${CURL_ARGS[@]}"
+		${CURL_BINARY} "${CURL_ARGS[@]}"
 	else
-		curl "${CURL_ARGS[@]}" > /dev/null 2>&1
+		${CURL_BINARY} "${CURL_ARGS[@]}" > /dev/null 2>&1
 	fi
 	if [ $? -ne 0 ]; then
 		write_error_log "Some files and/or folders could not be deleted."
@@ -463,7 +466,7 @@ get_file_content() {
 	local SRC_FILE="$1"
 	set_default_curl_options
 	CURL_ARGS+=("$REMOTE_PROTOCOL://$REMOTE_HOST/${REMOTE_PATH}${SRC_FILE}")
-	curl "${CURL_ARGS[@]}"
+	${CURL_BINARY} "${CURL_ARGS[@]}"
 }
 
 set_local_sha1() {
@@ -746,7 +749,7 @@ handle_submodule_sync() {
 handle_remote_protocol_options() {
 	if [ "$REMOTE_PROTOCOL" = "sftp" ]; then
 		set_sftp_config
-		
+
 		if [ ! -z "$CURL_PRIVATE_KEY" ]; then
 			write_log "Using ssh private key file $CURL_PRIVATE_KEY"
 			if [ -z "$CURL_PUBLIC_KEY" ]; then
@@ -756,7 +759,7 @@ handle_remote_protocol_options() {
 			write_log "Using ssh public key file $CURL_PUBLIC_KEY"
 			REMOTE_CMD_OPTIONS="$REMOTE_CMD_OPTIONS --key $CURL_PRIVATE_KEY --pubkey $CURL_PUBLIC_KEY"
 		fi
-		
+
 		# SFTP uses a different remove command and uses absolute paths
 		REMOTE_DELETE_CMD="rm /"
 	fi
@@ -844,7 +847,7 @@ set_remotes() {
 		write_log "No password is set."
 	else
 		write_log "Password is set."
-	fi 
+	fi
 
 	set_remote_protocol
 	# Add trailing slash if missing
@@ -859,7 +862,7 @@ set_remotes() {
 
 	set_remote_cacert
 	write_log "CACert is '$REMOTE_CACERT'."
-	
+
 	set_curl_insecure
 	write_log "Insecure is '$CURL_INSECURE'."
 }
